@@ -1,0 +1,62 @@
+FROM php:8.3-apache
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev libgd-dev libgmp-dev libzip-dev libicu-dev \
+    libxml2-dev libcurl4-openssl-dev libonig-dev libxslt1-dev \
+    libssl-dev unzip git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions required by LMS
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg 2>/dev/null || \
+    docker-php-ext-configure gd
+RUN docker-php-ext-install -j$(nproc) \
+    pgsql pdo_pgsql mysqli pdo_mysql \
+    gd gmp zip intl \
+    mbstring xml soap curl \
+    bcmath calendar ctype posix \
+    sockets simplexml xsl opcache
+
+# Enable Apache modules
+RUN a2enmod rewrite
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Configure Apache
+RUN echo '<VirtualHost *:80>\n\
+    DocumentRoot /var/www/lms\n\
+    <Directory /var/www/lms>\n\
+        AllowOverride All\n\
+        Require all granted\n\
+        Options -Indexes\n\
+    </Directory>\n\
+    <Directory /var/www/lms/bin>\n\
+        Require all denied\n\
+    </Directory>\n\
+    <Directory /var/www/lms/lib>\n\
+        Require all denied\n\
+    </Directory>\n\
+    <Directory /var/www/lms/backups>\n\
+        Require all denied\n\
+    </Directory>\n\
+    <Directory /var/www/lms/documents>\n\
+        Require all denied\n\
+    </Directory>\n\
+</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
+
+# PHP configuration
+RUN echo 'memory_limit = 256M\n\
+upload_max_filesize = 64M\n\
+post_max_size = 64M\n\
+max_execution_time = 300\n\
+date.timezone = Europe/Warsaw' > /usr/local/etc/php/conf.d/lms.ini
+
+WORKDIR /var/www/lms
+
+# Entrypoint script
+COPY docker/entrypoint-lms.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["apache2-foreground"]

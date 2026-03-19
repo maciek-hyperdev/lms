@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lms
+      POSTGRES_USER: lms
+      POSTGRES_PASSWORD: lmspassword
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d
+      - ../doc:/lms-schema:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lms"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  lms:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.lms
+    ports:
+      - "8080:80"
+    volumes:
+      - ../:/var/www/lms:cached
+      - lms-vendor:/var/www/lms/vendor
+      - lms-templates-c:/var/www/lms/templates_c
+    environment:
+      LMS_DB_TYPE: postgres
+      LMS_DB_HOST: db
+      LMS_DB_USER: lms
+      LMS_DB_PASS: lmspassword
+      LMS_DB_NAME: lms
+    depends_on:
+      db:
+        condition: service_healthy
+
+  freeradius:
+    build:
+      context: .
+      dockerfile: Dockerfile.freeradius
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  lms-vendor:
+  lms-templates-c:

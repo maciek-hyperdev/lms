@@ -1,0 +1,29 @@
+FROM freeradius/freeradius-server:3.2.6
+
+# Install PostgreSQL client module
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    freeradius-postgresql \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy our SQL configuration for LMS integration
+COPY freeradius/sql-lms.conf /etc/freeradius/mods-available/sql-lms
+COPY freeradius/sql-lms-pppoe.conf /etc/freeradius/mods-available/sql-lms-pppoe
+COPY freeradius/sql-lms-mac.conf /etc/freeradius/mods-available/sql-lms-mac
+COPY freeradius/sql-lms-lastonline.conf /etc/freeradius/mods-available/sql-lms-lastonline
+COPY freeradius/clients.conf /etc/freeradius/clients.conf
+COPY freeradius/default-site /etc/freeradius/sites-available/default
+
+# Enable modules
+RUN ln -sf /etc/freeradius/mods-available/sql-lms /etc/freeradius/mods-enabled/sql-lms \
+    && ln -sf /etc/freeradius/mods-available/sql-lms-pppoe /etc/freeradius/mods-enabled/sql-lms-pppoe \
+    && ln -sf /etc/freeradius/mods-available/sql-lms-mac /etc/freeradius/mods-enabled/sql-lms-mac \
+    && ln -sf /etc/freeradius/mods-available/sql-lms-lastonline /etc/freeradius/mods-enabled/sql-lms-lastonline \
+    && rm -f /etc/freeradius/mods-enabled/sql
+
+# Fix permissions
+RUN chown -R freerad:freerad /etc/freeradius/
+
+USER freerad
+
+CMD ["freeradius", "-f", "-l", "stdout"]
